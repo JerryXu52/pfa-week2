@@ -34,4 +34,4 @@ The tool separates two kinds of boundary, and only one is an exception.
 
 ## Demo Recording
 
-[Watch Assessment 2 Demo Video](PASTE_YOUR_RECORDING_URL_HERE)
+[Watch Assessment 2 Demo Video](https://youtu.be/mX6PaW_Dmis)
