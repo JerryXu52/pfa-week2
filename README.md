@@ -1,39 +1,37 @@
 # Procedural Cable & Hose Rig Tool — Maya 2026
 
-**Assessment 2 · Route B (New Tool / Major Upgrade)** · `CableHoseRigTool.py`
+This tool has evolved from simple NURBS curve extrusions — a single wire swept along a hand-drawn curve, with no notion of gravity, of a bundle, or of its own geometry occupying space — into a physics-aware procedural cable and hose bundle generator that builds entire multi-strand runs from a selection; the Route B design problem it answers is that environment and hard-surface artists spend excessive time drawing, sagging and tweaking multi-strand cable bundles, and the geometry they produce frequently interpenetrates in ways that look fine in the viewport but surface at final render, where the remedy is a costly manual re-route; the chosen solution combines catenary curve mathematics for gravity sagging, a Fermat (sunflower) spiral for optimal radial cross-section distribution, and iterative dynamic relaxation that measures the built geometry and adjusts it until every strand is clear of its neighbours, allowing collision-free, customisable cable bundles in seconds rather than by hand.
 
-Environment artists dressing industrial interiors, engine bays and server rooms lose hours hand-routing cables, and the resulting geometry frequently interpenetrates in ways that look acceptable in a shaded viewport but surface only at final render — where the fix is a manual re-route; the predecessor to this tool made that worse, because it generated single wires with no concept of gravity, no concept of a bundle, and no concept of its own geometry occupying space, so multi-strand runs reliably passed through themselves. This version replaces that with a physical-collision-aware bundle system that treats cable layout as constraint satisfaction rather than modelling: a normalised **catenary** supplies true gravity sag as a fraction of span length, a **Fermat (sunflower) spiral** using the golden angle supplies an optimal-by-construction radial packing scaled to guarantee `(radius × 2) + margin` of clearance, and — because a slack strand can still sag *through* a neighbour no matter how wide the bundle is — an iterative **relaxation** loop measures the finished geometry with exact segment-to-segment distance and widens the spread or eases the slack until the clearance holds, reporting failure honestly if it cannot. The artist selects locators, presses one button, and receives a tidy, gravity-correct, verifiably non-intersecting hose bundle.
+## Core Features & Habits
 
-## Key Upgrades
+**Length Stagger (0.0–10.0)** trims each strand's curve parameters `(t_start, t_end)`. At 0 every strand returns exactly `(0.0, 1.0)`; at 10 each end is trimmed up to 30%. Trimmed strands are sampled from the full-span catenary, so a short strand still lies on the curve it would have followed.
 
-- **Collision avoidance & gravity.** Catenary sampling; parallel-transport frames (no discontinuous flip on steep cables); sunflower packing; up to 24 relaxation passes. Verified: **0 intersections across 240 extreme and 148 realistic configurations.**
-- **Length Stagger (0–10).** Trims each strand's curve parameters `(t_start, t_end)`; at 0 exactly anchor-to-anchor, at 10 up to 30% cut from each end for a layered bundle. Trimmed strands still lie on the full-span catenary.
-- **Slack Variation (1–10).** Per-strand sag multiplier; strands reach both anchors but hang at different depths. Length spread 5% → 31%.
-- **Direct RGB picker.** `colorSliderGrp` drives one Lambert, `cableMat_custom`, updated in place rather than duplicated.
+**Sunflower spiral and iterative relaxation** place strands by golden angle (≈137.508°), scaled to guarantee `(radius × 2) + margin` of clearance. Because packing alone cannot stop one strand sagging *through* another, up to 24 passes measure segment-to-segment distance and either widen the bundle or ease the slack. Verified: **0 intersections across 240 extreme and 148 realistic configurations.**
 
-## Mandatory Maya Scripting Habits
+**Native `colorSliderGrp`** drives one Lambert, `cableMat_custom`, updated in place rather than duplicated each run.
 
-**Single-step undo.** All scene changes run inside `cmds.undoInfo(openChunk=True)` within `try...finally`, so a whole bundle undoes with one Ctrl+Z and the chunk closes even on exception.
+**Habit 1 — single-step undo.** All scene changes run in one undo chunk inside `try...finally`: a whole bundle undoes with one Ctrl+Z, and the chunk closes even on exception.
 
-**Safe deletion.** Output is confined to `CableRig_GRP` → `CableGeo_GRP` / `CableCurves_GRP`, with prefixes `cableGeo_`, `cableCrv_`, `cableMat_`. Cleanup sweeps by explicit prefix only — zero bare wildcards. A planted `userImportantCube` and `lambert1` survive clearing.
+```python
+cmds.undoInfo(openChunk=True, chunkName="GenerateCableRig")
+try:
+    ...
+finally:
+    cmds.undoInfo(closeChunk=True)
+```
+
+**Habit 2 — safe deletion.** Output is confined to `CableRig_GRP` → `CableGeo_GRP` / `CableCurves_GRP`, with prefixes `cableGeo_`, `cableCrv_`, `cableMat_`. Cleanup sweeps by explicit prefix only; no destructive wildcard appears in the file. A planted `userImportantCube` and `lambert1` survive clearing.
 
 ## Boundary Testing & Deliberate Failure Handling
 
-Invalid input never raises: fewer than two selections, non-transform nodes, coincident anchors and garbage slider values all return clamped values or a clear status warning. Routine self-correction reports as `[OK] Auto-fit…`; only a genuine conflict raises `[WARNING] Cable radius too large for bundle spread…`, naming the corrective value.
+The tool separates two kinds of boundary, and only one is an exception.
 
-The **Experimental Extreme Sag Physics (Beta)** checkbox lifts the safety clamps so unsatisfiable parameters can be demonstrated. The audit raises `CableRigError` — sag above 8.0, radius above 50.0, or over 24,000 curve samples — which is caught and shown in the colour-coded status field. Maya never enters an unhandled exception state.
+**A — Physical volume constraint.** Beta Extreme Mode on, Cable Radius 5.0, Bundle Spread 0.2. Five tubes of radius 5.0 need 10.02 units between centrelines, so strands would overlap at the anchor roots. The tool detects this at the packing stage and scales the bundle to the minimum viable radius. **No exception is raised**; the geometry is built and still collision-free. The console reports in amber: `[WARNING] … Cable radius too large for bundle spread, collision avoidance enforced. Set Bundle Spread to 13.748 or more…`, naming the corrective value.
 
-## Quick Start
+**B — Unsatisfiable request.** `CableRigError` is reserved for what the tool refuses to build: radius above 50.0, sag above 8.0, or over 24,000 curve samples. It is caught in `_on_generate` and shown in the console; a catch-all handler reports anything unforeseen in red. Maya never enters an unhandled exception state, and no corrupted geometry is written.
 
-**In Maya:** paste into a Python tab and Execute, or `import CableHoseRigTool; CableHoseRigTool.show_ui()`.
+**Reflection.** I tried extreme cable thickness with minimal spread; collision avoidance was enforced, the bundle scaled itself, and the console named the value to set. Pushing further crossed from *correctable* to *refuse to build*, where `CableRigError` was raised and caught. Separating those cases was the key lesson: an input the tool can fix itself should not carry the same severity as one it cannot.
 
-**From a terminal**, open the port once in Maya:
+## Demo Recording
 
-```python
-cmds.commandPort(name='127.0.0.1:7002', sourceType='mel')
-```
-
-then run `python3 CableHoseRigTool.py`. The script Base64-encodes its own source into a MEL `python()` call, eliminating quoting and newline hazards. Select two or more transforms in anchor order, then **Generate Cable Rig**.
-
-## Recording
-**Recording:** [https://youtu.be/mX6PaW_Dmis](https://youtu.be/mX6PaW_Dmis)
+[Watch Assessment 2 Demo Video](PASTE_YOUR_RECORDING_URL_HERE)
