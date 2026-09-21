@@ -36,4 +36,4 @@ cmds.commandPort(name='127.0.0.1:7002', sourceType='mel')
 then run `python3 CableHoseRigTool.py`. The script Base64-encodes its own source into a MEL `python()` call, eliminating quoting and newline hazards. Select two or more transforms in anchor order, then **Generate Cable Rig**.
 
 ## Recording
-**Recording:** [https://youtu.be/tp5Vjp4liss](https://youtu.be/tp5Vjp4liss)
+**Recording:** [https://youtu.be/_iMwksHFmzg](https://youtu.be/_iMwksHFmzg)
